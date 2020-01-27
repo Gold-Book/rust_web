@@ -1,0 +1,78 @@
+version: '3'
+services:
+  app:
+    build: .
+    image: gooldbook:example
+    volumes:
+      - $PWD/src:/usr/src/example/src
+    command: /bin/sh -c "systemfd --no-pid -s http::0.0.0.0:3000 -- cargo watch -x 'run'"
+    networks:
+      - gooldbook
+    ports:
+      - "3000:3000"
+    environment:
+      TZ: Asia/Tokyo
+      RUST_LOG: info
+      RUST_BACKTRACE: 1
+      TERM: xterm-256color`
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+      STATIC_DOMAIN_URL: "http://minio:9000/public"
+    tty:
+      true
+
+  db01:
+    image: cockroachdb/cockroach:v19.1.5
+    command: start --insecure
+    networks:
+      - gooldbook
+    ports:
+      - "3001:8080"
+      - "4000:26257"
+    environment:
+      TZ: Asia/Tokyo
+
+  db02:
+    image: cockroachdb/cockroach:v19.1.5
+    command: start --insecure --join=db01
+    networks:
+      - gooldbook
+    environment:
+      TZ: Asia/Tokyo
+    depends_on:
+      - db01
+
+  db03:
+    image: cockroachdb/cockroach:v19.1.5
+    command: start --insecure --join=db01
+    networks:
+      - gooldbook
+    environment:
+      TZ: Asia/Tokyo
+    depends_on:
+      - db01
+
+  minio:
+    image: minio/minio
+    entrypoint: sh
+    command: -c "
+      mkdir -p /export/public;
+      mkdir -p /export/.minio.sys/buckets/public;
+      cp /tmp/public/policy.json /export/.minio.sys/buckets/public/policy.json;
+      cp -r /tmp/usr/data/public/default /export/public;
+      /usr/bin/minio server /export;"
+    environment:
+      MINIO_ACCESS_KEY: dummy
+      MINIO_SECRET_KEY: dummy
+      TZ: Asia/Tokyo
+    volumes:
+      - $PWD/local/minio/public/:/tmp/usr/data/public
+      - $PWD/local/minio/public/policy.json:/tmp/public/policy.json
+    ports:
+      - "3002:9000"
+    networks:
+      - gooldbook
+
+networks:
+  gooldbook:
+    driver: bridge
